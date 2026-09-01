@@ -1,0 +1,46 @@
+# ===== Dependencies =====
+node_modules/
+**/node_modules/
+
+# ===== Environment & Secrets =====
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# ===== Build outputs =====
+dist/
+build/
+coverage/
+*.jsbundle
+
+# ===== React Native / Metro =====
+.metro-health-check*
+.hastecalls.json
+.bundle/
+frontend/ios/Pods/
+frontend/ios/build/
+frontend/android/build/
+frontend/android/.gradle/
+frontend/android/.cxx/
+frontend/android/app/build/
+local.properties
+
+# ===== Logs =====
+*.log
+npm-debug.log*
+yarn-error.log*
+backend/server.log
+backend/server-error.log
+
+# ===== Uploads / runtime =====
+backend/uploads/
+
+# ===== OS files =====
+.DS_Store
+Thumbs.db
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.iml
