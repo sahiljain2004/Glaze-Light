@@ -2,7 +2,7 @@ import React, {
     useState,
     useEffect,
 } from "react";
-import { searchItems, updateItemStock } from '../services/itemApi';
+import { searchItems } from '../services/itemApi';
 import api from '../services/api';
 import AppButton from "../Components/AppButton";
 import { updateTransaction, createTransaction } from '../services/transactionApi';
@@ -183,19 +183,6 @@ const SaleScreen = () => {
             const response = await createTransaction(newSaleData);
 
             if (response.success) {
-                for (const billItem of items) {
-                    const dbId = billItem.dbId ?? billItem.itemId;
-                    const qty = Number(billItem.quantity || 1);
-
-                    if (qty > 0) {
-                        try {
-                            await updateItemStock(dbId, qty, billItem.name || '');
-                        } catch (stockError) {
-                            console.error('Stock update error:', stockError);
-                        }
-                    }
-                }
-
                 Alert.alert(
                     "Success",
                     "Sale saved successfully!",

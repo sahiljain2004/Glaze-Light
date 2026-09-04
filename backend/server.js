@@ -180,29 +180,53 @@ app.delete('/api/transactions/:id', verifyToken, (req, res) => {
     console.log('🔑 User ID:', userId);
 
     db.query(
-        'DELETE FROM transactions WHERE id = ? AND user_id = ?',
+        'SELECT items FROM transactions WHERE id = ? AND user_id = ?',
         [transactionId, userId],
-        (err, result) => {
-            if (err) {
-                console.error('❌ DB Error:', err);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Database error'
-                });
+        (fetchErr, rows) => {
+            if (fetchErr) {
+                console.error('❌ DB Error:', fetchErr);
+                return res.status(500).json({ success: false, message: 'Database error' });
             }
 
-            if (result.affectedRows === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Transaction not found'
-                });
-            }
+            const rawItems = rows.length > 0 ? rows[0].items : null;
+            const txnItems = rawItems ? (typeof rawItems === 'string' ? JSON.parse(rawItems) : rawItems) : [];
+            const promiseDb = db.promise();
 
-            console.log('✅ Transaction deleted:', transactionId);
+            const restoreStock = async () => {
+                for (const item of txnItems) {
+                    const dbId = parseInt(item.dbId ?? item.itemId, 10);
+                    const qty = Number(item.quantity || 1);
+                    if (!qty || qty <= 0) continue;
+                    if (dbId) {
+                        await promiseDb.query('UPDATE items SET stock = stock + ? WHERE id = ? AND user_id = ?', [qty, dbId, userId]);
+                    } else {
+                        await promiseDb.query('UPDATE items SET stock = stock + ? WHERE name = ? AND user_id = ?', [qty, String(item.name || '').trim(), userId]);
+                    }
+                }
+            };
 
-            res.json({
-                success: true,
-                message: 'Transaction deleted successfully'
+            restoreStock().then(() => {
+                db.query(
+                    'DELETE FROM transactions WHERE id = ? AND user_id = ?',
+                    [transactionId, userId],
+                    (err, result) => {
+                        if (err) {
+                            console.error('❌ DB Error:', err);
+                            return res.status(500).json({ success: false, message: 'Database error' });
+                        }
+
+                        if (result.affectedRows === 0) {
+                            return res.status(404).json({ success: false, message: 'Transaction not found' });
+                        }
+
+                        console.log('✅ Transaction deleted:', transactionId);
+
+                        res.json({ success: true, message: 'Transaction deleted successfully' });
+                    }
+                );
+            }).catch(e => {
+                console.error('❌ Stock restore error:', e.message);
+                res.status(500).json({ success: false, message: 'Stock restore failed' });
             });
         }
     );
@@ -233,59 +257,107 @@ app.put('/api/transactions/:id', verifyToken, (req, res) => {
         date
     } = req.body;
 
+    // First fetch old transaction to adjust stock
     db.query(
-        `UPDATE transactions SET
-            customer_name = ?,
-            phone_number = ?,
-            address = ?,
-            description = ?,
-            sale_type = ?,
-            total_amount = ?,
-            received_amount = ?,
-            due_amount = ?,
-            payment_method = ?,
-            is_received = ?,
-            items = ?,
-            date = ?
-        WHERE id = ? AND user_id = ?`,
-        [
-            customerName,
-            phoneNumber || null,
-            address || null,
-            description || null,
-            saleType || 'sale',
-            totalAmount || 0,
-            receivedAmount || 0,
-            dueAmount || 0,
-            paymentMethod || 'Cash',
-            dueAmount === 0 ? 1 : 0,
-            items ? JSON.stringify(items) : null,
-            date || new Date().toISOString().split('T')[0],
-            req.params.id,
-            req.userId
-        ],
-        (err, result) => {
-            if (err) {
-                console.error('❌ DB Error:', err);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Database error',
-                    error: err.message
-                });
+        'SELECT items FROM transactions WHERE id = ? AND user_id = ?',
+        [req.params.id, req.userId],
+        (fetchErr, rows) => {
+            if (fetchErr) {
+                console.error('❌ DB Error:', fetchErr);
+                return res.status(500).json({ success: false, message: 'Database error' });
             }
 
-            if (result.affectedRows === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Transaction not found'
-                });
-            }
+            const rawOldItems = rows.length > 0 ? rows[0].items : null;
+            const oldItems = rawOldItems ? (typeof rawOldItems === 'string' ? JSON.parse(rawOldItems) : rawOldItems) : [];
+            const newItems = items || [];
 
-            console.log('✅ Transaction updated:', req.params.id);
+            // Restore old stock
+            const promiseDb = db.promise();
+            const adjustStock = async () => {
+                for (const oldItem of oldItems) {
+                    const oldId = parseInt(oldItem.dbId ?? oldItem.itemId, 10);
+                    const oldQty = Number(oldItem.quantity || 1);
+                    if (!oldQty || oldQty <= 0) continue;
+                    if (oldId) {
+                        await promiseDb.query('UPDATE items SET stock = stock + ? WHERE id = ? AND user_id = ?', [oldQty, oldId, req.userId]);
+                    } else {
+                        await promiseDb.query('UPDATE items SET stock = stock + ? WHERE name = ? AND user_id = ?', [oldQty, String(oldItem.name || '').trim(), req.userId]);
+                    }
+                }
+                // Apply new stock
+                for (const newItem of newItems) {
+                    const newId = parseInt(newItem.dbId ?? newItem.itemId, 10);
+                    const newQty = Number(newItem.quantity || 1);
+                    if (!newQty || newQty <= 0) continue;
+                    if (newId) {
+                        await promiseDb.query('UPDATE items SET stock = stock - ? WHERE id = ? AND user_id = ? AND stock >= ?', [newQty, newId, req.userId, newQty]);
+                    } else {
+                        await promiseDb.query('UPDATE items SET stock = stock - ? WHERE name = ? AND user_id = ? AND stock >= ?', [newQty, String(newItem.name || '').trim(), req.userId, newQty]);
+                    }
+                }
+            };
 
-            res.json({
-                success: true,
-                message: 'Transaction updated successfully'
+            adjustStock().then(() => {
+                // Update the transaction
+                db.query(
+                    `UPDATE transactions SET
+                        customer_name = ?,
+                        phone_number = ?,
+                        address = ?,
+                        description = ?,
+                        sale_type = ?,
+                        total_amount = ?,
+                        received_amount = ?,
+                        due_amount = ?,
+                        payment_method = ?,
+                        is_received = ?,
+                        items = ?,
+                        date = ?
+                    WHERE id = ? AND user_id = ?`,
+                    [
+                        customerName,
+                        phoneNumber || null,
+                        address || null,
+                        description || null,
+                        saleType || 'sale',
+                        totalAmount || 0,
+                        receivedAmount || 0,
+                        dueAmount || 0,
+                        paymentMethod || 'Cash',
+                        dueAmount === 0 ? 1 : 0,
+                        items ? JSON.stringify(items) : null,
+                        date || new Date().toISOString().split('T')[0],
+                        req.params.id,
+                        req.userId
+                    ],
+                    (err, result) => {
+                        if (err) {
+                            console.error('❌ DB Error:', err);
+                            return res.status(500).json({
+                                success: false,
+                                message: 'Database error',
+                                error: err.message
+                            });
+                        }
+
+                        if (result.affectedRows === 0) {
+                            return res.status(404).json({
+                                success: false,
+                                message: 'Transaction not found'
+                            });
+                        }
+
+                        console.log('✅ Transaction updated:', req.params.id);
+
+                        res.json({
+                            success: true,
+                            message: 'Transaction updated successfully'
+                        });
+                    }
+                );
+            }).catch(e => {
+                console.error('❌ Stock adjust error:', e.message);
+                res.status(500).json({ success: false, message: 'Stock adjust failed' });
             });
         }
     );
