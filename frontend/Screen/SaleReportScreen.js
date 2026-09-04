@@ -9,7 +9,7 @@ import {
     RefreshControl,
     ActivityIndicator,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '../services/api';
 import SaleReportHeader from '../Components/SaleReportHeader';
 import DateFilterBar from '../Components/DateFilter';
 import FiltersAppliedBar from '../Components/FiltersAppliedbar';
@@ -38,10 +38,6 @@ function formatDisplayDate(dateString) {
 }
 
 export default function SaleReportScreen({ navigation }) {
-    // ==========================================
-    // STATES
-    // ==========================================
-
     const [sales, setSales] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -57,47 +53,19 @@ export default function SaleReportScreen({ navigation }) {
         party: 'All Parties',
     });
 
-    // ==========================================
-    // FETCH DATA FROM API
-    // ==========================================
-
     const fetchSales = async () => {
         try {
             setLoading(true);
-            console.log('🔄 Fetching sales report...');
 
-            const token = await AsyncStorage.getItem('token');
-            console.log('🔑 Token:', token ? '✅ Found' : '❌ Not found');
-
-            if (!token) {
-                console.log('❌ No token found');
-                navigation.replace('LoginScreen');
-                return;
-            }
-
-            // ✅ Direct API call
-            const response = await fetch('http://10.151.11.36:5001/api/sale-report', {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            });
-
-            console.log('📡 Status:', response.status);
-
-            const data = await response.json();
-            console.log('📥 Response:', data);
+            const { data } = await api.get('/api/sale-report');
 
             if (data.success) {
                 setSales(data.transactions || []);
-                console.log('✅ Loaded', data.transactions?.length, 'sales');
             } else {
-                console.log('❌ Failed:', data.message);
                 setSales([]);
             }
         } catch (error) {
-            console.error('❌ Error:', error);
+            console.error('Error:', error);
             setSales([]);
         } finally {
             setLoading(false);
@@ -105,52 +73,28 @@ export default function SaleReportScreen({ navigation }) {
         }
     };
 
-    // ==========================================
-    // PULL TO REFRESH
-    // ==========================================
-
     const onRefresh = () => {
         setRefreshing(true);
         fetchSales();
     };
 
-    // ==========================================
-    // LOAD ON MOUNT
-    // ==========================================
-
     useEffect(() => {
         fetchSales();
     }, []);
-
-    // ==========================================
-    // DATE RANGE
-    // ==========================================
 
     const activeRange = useMemo(() => {
         if (customRange) return customRange;
         return getPeriodRange(selectedPeriod);
     }, [customRange, selectedPeriod]);
 
-    // ==========================================
-    // FILTER TRANSACTIONS BY DATE
-    // ==========================================
-
     const filteredTransactions = useMemo(() => {
-        console.log('📊 Filtering sales with date range:', activeRange);
-
         const filtered = sales.filter((t) => {
             const dateObj = t.date ? new Date(t.date) : new Date();
             const isInRange = isWithinRange(dateObj, activeRange.from, activeRange.to);
             return isInRange;
         });
-
-        console.log('📊 Filtered Transactions:', filtered.length);
         return filtered;
     }, [sales, activeRange]);
-
-    // ==========================================
-    // SUMMARY CALCULATION
-    // ==========================================
 
     const summary = useMemo(() => {
         const noOfTxns = filteredTransactions.length;
@@ -175,22 +119,13 @@ export default function SaleReportScreen({ navigation }) {
         };
     }, [filteredTransactions]);
 
-    // ==========================================
-    // FILTER CHIPS
-    // ==========================================
-
     const filterChips = [
         { label: 'URP User', value: appliedFilters.urpUser },
         { label: 'Txns Type', value: appliedFilters.txnsType },
         { label: 'Party', value: appliedFilters.party },
     ];
 
-    // ==========================================
-    // HANDLERS
-    // ==========================================
-
     const handleSelectPeriod = (period) => {
-        console.log('📅 Selected Period:', period);
         setSelectedPeriod(period);
         setCustomRange(null);
         if (period === 'Custom Range') {
@@ -199,15 +134,10 @@ export default function SaleReportScreen({ navigation }) {
     };
 
     const handleApplyCustomRange = (from, to) => {
-        console.log('📅 Custom Range Applied:', { from, to });
         setCustomRange({ from, to });
         setSelectedPeriod('Custom Range');
         setCalendarVisible(false);
     };
-
-    // ==========================================
-    // RENDER EMPTY STATE
-    // ==========================================
 
     const renderEmptyState = () => (
         <View style={styles.emptyState}>
@@ -215,10 +145,6 @@ export default function SaleReportScreen({ navigation }) {
             <Text style={styles.emptySubText}>Add a new sale to see it here</Text>
         </View>
     );
-
-    // ==========================================
-    // RENDER LOADING
-    // ==========================================
 
     if (loading) {
         return (
@@ -228,10 +154,6 @@ export default function SaleReportScreen({ navigation }) {
             </View>
         );
     }
-
-    // ==========================================
-    // MAIN UI
-    // ==========================================
 
     return (
         <SafeAreaView style={styles.safeArea}>

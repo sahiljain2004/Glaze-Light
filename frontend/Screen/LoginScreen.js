@@ -14,7 +14,7 @@ import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@react-native-vector-icons/feather/static";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LoginInput from "../Components/LoginInpur";
-import { API_URL } from "../config";
+import api from '../services/api';
 
 const LoginScreen = () => {
     const navigation = useNavigation();
@@ -25,10 +25,6 @@ const LoginScreen = () => {
     const [loading, setLoading] = useState(false);
 
     const isLoginEnabled = emailOrPhone.trim().length > 0 && password.trim().length > 0;
-
-    // =====================================
-    // LOGIN
-    // =====================================
 
     const handleLogin = async () => {
         if (!isLoginEnabled) {
@@ -42,53 +38,31 @@ const LoginScreen = () => {
             password: password,
         };
 
-        console.log("📝 Login Data:", loginData);
-
         try {
-            // 🔥 DIRECT URL - HARDCODED
-            const response = await fetch('http://10.151.11.36:5001/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(loginData),
-            });
-
-            console.log("📡 Status:", response.status);
-
-            const data = await response.json();
-            console.log("📥 Data:", data);
+            const { data } = await api.post('/api/auth/login', loginData);
 
             if (data.success) {
                 await AsyncStorage.setItem('token', data.token);
                 await AsyncStorage.setItem('user', JSON.stringify(data.user));
 
-                console.log("✅ Login Successful!");
                 navigation.replace("TransactionScreen");
             } else {
                 Alert.alert("Login Failed", data.message || "Invalid credentials");
                 setLoading(false);
             }
         } catch (error) {
-            console.error("❌ Error:", error);
+            console.error("Error:", error);
             Alert.alert(
-                "❌ Connection Error",
-                `Could not connect to server.\n\nURL: http://10.151.11.36:5001\n\nMake sure:\n1. Server is running\n2. Same WiFi network`
+                "Connection Error",
+                `Could not connect to server.\n\nMake sure:\n1. Server is running\n2. Same WiFi network`
             );
             setLoading(false);
         }
     };
-    // =====================================
-    // REGISTER
-    // =====================================
 
     const handleRegister = () => {
         navigation.navigate("RegisterScreen");
     };
-
-    // =====================================
-    // FORGOT PASSWORD
-    // =====================================
 
     const handleForgotPassword = () => {
         Alert.alert(
@@ -96,10 +70,6 @@ const LoginScreen = () => {
             "Please contact support to reset your password."
         );
     };
-
-    // =====================================
-    // UI
-    // =====================================
 
     return (
         <KeyboardAvoidingView
@@ -191,14 +161,12 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: "#F5F7FA",
     },
-
     scrollContent: {
         flexGrow: 1,
         justifyContent: "center",
         paddingHorizontal: 20,
         paddingVertical: 40,
     },
-
     logoContainer: {
         width: 72,
         height: 72,
@@ -210,14 +178,12 @@ const styles = StyleSheet.create({
         marginBottom: 18,
         elevation: 5,
     },
-
     title: {
         fontSize: 28,
         fontWeight: "800",
         color: "#222",
         textAlign: "center",
     },
-
     subtitle: {
         fontSize: 15,
         color: "#777",
@@ -225,26 +191,22 @@ const styles = StyleSheet.create({
         marginTop: 6,
         marginBottom: 28,
     },
-
     formCard: {
         backgroundColor: "#FFFFFF",
         borderRadius: 16,
         padding: 20,
         elevation: 3,
     },
-
     forgotButton: {
         alignSelf: "flex-end",
         marginTop: -3,
         marginBottom: 20,
     },
-
     forgotText: {
         fontSize: 14,
         fontWeight: "600",
         color: "#075CA8",
     },
-
     loginButton: {
         height: 55,
         backgroundColor: "#075CA8",
@@ -252,33 +214,27 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
     },
-
     loginButtonDisabled: {
         backgroundColor: "#D5D9DE",
     },
-
     loginText: {
         color: "#FFFFFF",
         fontSize: 17,
         fontWeight: "700",
     },
-
     loginTextDisabled: {
         color: "#888",
     },
-
     registerContainer: {
         flexDirection: "row",
         justifyContent: "center",
         alignItems: "center",
         marginTop: 22,
     },
-
     registerNormal: {
         fontSize: 14,
         color: "#777",
     },
-
     registerText: {
         fontSize: 14,
         fontWeight: "700",

@@ -14,6 +14,7 @@ import SaleScreen from "./Screen/SaleScreen";
 import TransactionScreen from "./Screen/TransactionScreen";
 import Dashboard from "./Screen/Dashboard";
 import ItemsScreen from "./Screen/ItemsScreen";
+
 import AddItemScreen from "./Screen/AddItemScreen";
 import PrintBillScreen from "./Screen/PrintBillScreen";
 import LoginScreen from "./Screen/LoginScreen";
@@ -102,7 +103,7 @@ const App = () => {
                             <Stack.Screen name="ItemsScreen" component={ItemsScreen} />
                             <Stack.Screen name="AddItemScreen" component={AddItemScreen} />
                             <Stack.Screen name="SaleScreen" component={SaleScreen} />
-                            <Stack.Screen name="AddItemsToSaleScreen" component={AddItemsToSaleScreen} />
+                        
                             <Stack.Screen name="PrintBillScreen" component={PrintBillScreen} />
                             <Stack.Screen name="SaleReportScreen" component={SaleReportScreen} />
                         </>

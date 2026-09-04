@@ -9,7 +9,7 @@ import {
     Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '../services/api';
 
 import Header from "../Components/Header";
 import SummaryCard from "../Components/SummaryCard";
@@ -27,69 +27,24 @@ const Dashboard = () => {
     const fetchDashboardData = async () => {
         try {
             setLoading(true);
-            console.log('🔄 Fetching dashboard data...');
 
-            const token = await AsyncStorage.getItem('token');
-            console.log('🔑 Token:', token ? '✅ Found' : '❌ Not found');
+            const [summaryRes, recentRes] = await Promise.all([
+                api.get('/api/dashboard/summary'),
+                api.get('/api/dashboard/recent?limit=5'),
+            ]);
 
-            if (!token) {
-                Alert.alert('Error', 'Please login again');
-                navigation.replace('LoginScreen');
-                return;
-            }
+            const summaryData = summaryRes.data;
+            const recentData = recentRes.data;
 
-            // ✅ Test both APIs
-            const baseUrl = 'http://10.151.11.36:5001';
-
-            // 1. Summary API
-            console.log('📡 Calling Summary API...');
-            const summaryRes = await fetch(`${baseUrl}/api/dashboard/summary`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            });
-            const summaryData = await summaryRes.json();
-            console.log('📥 Summary Status:', summaryRes.status);
-            console.log('📥 Summary Data:', summaryData);
-
-            // 2. Recent API
-            console.log('📡 Calling Recent API...');
-            const recentRes = await fetch(`${baseUrl}/api/dashboard/recent?limit=5`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            });
-            const recentData = await recentRes.json();
-            console.log('📥 Recent Status:', recentRes.status);
-            console.log('📥 Recent Data:', recentData);
-
-            // ✅ Set data
             if (summaryData.success) {
                 setSummary(summaryData.summary);
-                console.log('✅ Summary set');
-            } else {
-                console.log('❌ Summary failed:', summaryData.message);
             }
 
             if (recentData.success) {
                 setRecentTransactions(recentData.recentTransactions || []);
-                console.log('✅ Recent set:', recentData.recentTransactions?.length);
-            } else {
-                console.log('❌ Recent failed:', recentData.message);
             }
-
-            // ✅ Alert for debugging
-            Alert.alert(
-                'Dashboard Data',
-                `Summary: ${summaryData.success ? '✅' : '❌'}\nRecent: ${recentData.success ? '✅' : '❌'}\nTransactions: ${recentData.recentTransactions?.length || 0}`
-            );
-
         } catch (error) {
-            console.error('❌ Error:', error);
+            console.error('Error:', error);
             Alert.alert('Error', error.message);
         } finally {
             setLoading(false);
