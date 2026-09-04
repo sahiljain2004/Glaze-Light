@@ -1088,6 +1088,14 @@ app.get('/api/items/search', verifyToken, (req, res) => {
     );
 });
 // ============================================
+// WAKEUP (keeps Render free tier alive)
+// ============================================
+
+app.get('/wakeup', (req, res) => {
+    res.json({ status: 'awake', time: new Date().toISOString() });
+});
+
+// ============================================
 // START SERVER
 // ============================================
 
@@ -1104,4 +1112,13 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`📊 Dashboard Summary: GET /api/dashboard/summary`);
     console.log(`📊 Recent Transactions: GET /api/dashboard/recent`);
     console.log('=================================\n');
+
+    // Self-ping every 14 min 59 sec to prevent Render spin-down
+    const BASE_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+    const WAKEUP_URL = `${BASE_URL}/wakeup`;
+    setInterval(() => {
+        fetch(WAKEUP_URL)
+            .then(() => console.log('💓 Wakeup ping sent'))
+            .catch(err => console.error('❌ Wakeup ping failed:', err.message));
+    }, 14 * 60 * 1000 + 59 * 1000); // 14:59 min
 });
