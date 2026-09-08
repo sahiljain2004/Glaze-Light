@@ -1,6 +1,5 @@
 const express = require('express');
 const mysql = require('mysql2');
-const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
 require('dotenv').config();
@@ -74,39 +73,12 @@ db.query('SELECT 1', (err) => {
 const promiseDb = db.promise();
 
 // ============================================
-// VERIFY TOKEN
+// USER CONTEXT (temporary: no JWT, single user)
 // ============================================
 
-const verifyToken = (req, res, next) => {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader) {
-        return res.status(401).json({
-            success: false,
-            message: 'No token provided'
-        });
-    }
-
-    const token = authHeader.split(' ')[1];
-
-    if (!token) {
-        return res.status(401).json({
-            success: false,
-            message: 'Invalid token format'
-        });
-    }
-
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'mysecretkey');
-        req.userId = decoded.id;
-        next();
-    } catch (error) {
-        console.error('❌ Token verification failed:', error.message);
-        return res.status(401).json({
-            success: false,
-            message: 'Invalid or expired token'
-        });
-    }
+const setUserContext = (req, res, next) => {
+    req.userId = 1;
+    next();
 };
 
 // ============================================
@@ -161,17 +133,9 @@ app.post('/api/auth/login', (req, res) => {
                     });
                 }
 
-                const token = jwt.sign(
-                    { id: user.id, email: user.email },
-                    process.env.JWT_SECRET || 'mysecretkey',
-                    { expiresIn: '7d' }
-                );
-
-
                 res.json({
                     success: true,
                     message: 'Login successful',
-                    token,
                     user: {
                         id: user.id,
                         name: user.name,
@@ -185,7 +149,7 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 // ✅ GET TRANSACTIONS
-app.get('/api/transactions', verifyToken, (req, res) => {
+app.get('/api/transactions', setUserContext, (req, res) => {
 
     db.query(
         'SELECT * FROM transactions WHERE user_id = ? ORDER BY id DESC',
@@ -211,7 +175,7 @@ app.get('/api/transactions', verifyToken, (req, res) => {
 // DELETE TRANSACTION
 // ============================================
 
-app.delete('/api/transactions/:id', verifyToken, (req, res) => {
+app.delete('/api/transactions/:id', setUserContext, (req, res) => {
     const transactionId = req.params.id;
     const userId = req.userId;
 
@@ -272,7 +236,7 @@ app.delete('/api/transactions/:id', verifyToken, (req, res) => {
 
 
 // ✅ UPDATE TRANSACTION
-app.put('/api/transactions/:id', verifyToken, (req, res) => {
+app.put('/api/transactions/:id', setUserContext, (req, res) => {
 
     const {
         customerName,
@@ -392,7 +356,7 @@ app.put('/api/transactions/:id', verifyToken, (req, res) => {
     );
 });
 // ✅ CREATE TRANSACTION
-app.post('/api/transactions', verifyToken, (req, res) => {
+app.post('/api/transactions', setUserContext, (req, res) => {
 
     const {
         customerName,
@@ -505,7 +469,7 @@ app.post('/api/transactions', verifyToken, (req, res) => {
 // SALE REPORT ROUTE - ✅ YE ADD KARO
 // ============================================
 
-app.get('/api/sale-report', verifyToken, (req, res) => {
+app.get('/api/sale-report', setUserContext, (req, res) => {
 
     const userId = req.userId;
 
@@ -555,7 +519,7 @@ app.get('/api/sale-report', verifyToken, (req, res) => {
 // ============================================
 
 // ✅ CREATE ITEM
-app.post('/api/items', verifyToken, (req, res) => {
+app.post('/api/items', setUserContext, (req, res) => {
 
     const { name, category, unit, price, stock } = req.body;
 
@@ -614,7 +578,7 @@ app.post('/api/items', verifyToken, (req, res) => {
 });
 
 // ✅ GET ALL ITEMS
-app.get('/api/items', verifyToken, (req, res) => {
+app.get('/api/items', setUserContext, (req, res) => {
 
     db.query(
         'SELECT * FROM items WHERE user_id = ? ORDER BY id DESC',
@@ -647,7 +611,7 @@ app.get('/api/items', verifyToken, (req, res) => {
 });
 
 // ✅ GET SINGLE ITEM
-app.get('/api/items/:id', verifyToken, (req, res, next) => {
+app.get('/api/items/:id', setUserContext, (req, res, next) => {
     if (req.params.id === 'search') {
         return next();
     }
@@ -692,7 +656,7 @@ app.get('/api/items/:id', verifyToken, (req, res, next) => {
 });
 
 // ✅ UPDATE ITEM
-app.put('/api/items/:id', verifyToken, (req, res) => {
+app.put('/api/items/:id', setUserContext, (req, res) => {
 
     const { name, category, unit, price, stock } = req.body;
 
@@ -739,7 +703,7 @@ app.put('/api/items/:id', verifyToken, (req, res) => {
 });
 
 // ✅ DELETE ITEM
-app.delete('/api/items/:id', verifyToken, (req, res) => {
+app.delete('/api/items/:id', setUserContext, (req, res) => {
 
     db.query(
         'DELETE FROM items WHERE id = ? AND user_id = ?',
@@ -770,7 +734,7 @@ app.delete('/api/items/:id', verifyToken, (req, res) => {
 });
 
 // ✅ SEARCH ITEMS
-app.get('/api/items/search/:query', verifyToken, (req, res) => {
+app.get('/api/items/search/:query', setUserContext, (req, res) => {
 
     const searchTerm = `%${req.params.query}%`;
 
@@ -801,7 +765,7 @@ app.get('/api/items/search/:query', verifyToken, (req, res) => {
     );
 });
 // ✅ SEARCH TRANSACTIONS - WITH PHONE NUMBER
-app.get('/api/transactions/search', verifyToken, (req, res) => {
+app.get('/api/transactions/search', setUserContext, (req, res) => {
 
     const userId = req.userId;
     const query = req.query.q || '';
@@ -853,7 +817,7 @@ app.get('/api/transactions/search', verifyToken, (req, res) => {
     );
 });
 
-app.get('/api/dashboard/summary', verifyToken, (req, res) => {
+app.get('/api/dashboard/summary', setUserContext, (req, res) => {
 
     const userId = req.userId;
 
@@ -900,7 +864,7 @@ app.get('/api/dashboard/summary', verifyToken, (req, res) => {
 });
 
 // ✅ GET RECENT TRANSACTIONS
-app.get('/api/dashboard/recent', verifyToken, (req, res) => {
+app.get('/api/dashboard/recent', setUserContext, (req, res) => {
 
     const userId = req.userId;
     const limit = parseInt(req.query.limit) || 5;
@@ -951,7 +915,7 @@ app.get('/api/dashboard/recent', verifyToken, (req, res) => {
 // UPDATE ITEM STOCK (when sale happens)
 // ============================================
 
-app.put('/api/items/stock/:id', verifyToken, (req, res) => {
+app.put('/api/items/stock/:id', setUserContext, (req, res) => {
 
     const userId = req.userId;
     const { quantity, itemName } = req.body; // quantity sold
@@ -1029,7 +993,7 @@ app.put('/api/items/stock/:id', verifyToken, (req, res) => {
 });
 
 // ✅ SEARCH ITEMS (for auto-suggest)
-app.get('/api/items/search', verifyToken, (req, res) => {
+app.get('/api/items/search', setUserContext, (req, res) => {
 
     const userId = req.userId;
     const query = req.query.q || '';

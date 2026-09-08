@@ -9,7 +9,6 @@ import {
 } from "@react-navigation/native-stack";
 import { View, ActivityIndicator } from 'react-native';
 import { navigationRef } from './services/navigationRef';
-import api from './services/api';
 
 // Import Screens
 import SaleScreen from "./Screen/SaleScreen";
@@ -35,18 +34,14 @@ const App = () => {
     useEffect(() => {
         const checkLoginStatus = async () => {
             try {
-                const token = await AsyncStorage.getItem('token');
+                const user = await AsyncStorage.getItem('user');
 
-                if (token) {
-                    // Validate token by hitting a lightweight endpoint
-                    await api.get('/api/items');
+                if (user) {
                     setIsLoggedIn(true);
                 } else {
                     setIsLoggedIn(false);
                 }
             } catch (error) {
-                // Token invalid or server unreachable with stale token
-                await AsyncStorage.removeItem('token');
                 await AsyncStorage.removeItem('user');
                 setIsLoggedIn(false);
             } finally {

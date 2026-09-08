@@ -42,7 +42,6 @@ const LoginScreen = () => {
             const { data } = await api.post('/api/auth/login', loginData);
 
             if (data.success) {
-                await AsyncStorage.setItem('token', data.token);
                 await AsyncStorage.setItem('user', JSON.stringify(data.user));
 
                 navigation.replace("TransactionScreen");
