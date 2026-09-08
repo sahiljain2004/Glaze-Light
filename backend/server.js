@@ -24,6 +24,21 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true }));
 
+// ============================================
+// API REQUEST LOGGER
+// ============================================
+
+app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        const { method, originalUrl } = req;
+        const status = res.statusCode;
+        console.log(`[${new Date().toISOString()}] ${method} ${originalUrl} -> ${status} (${duration}ms)`);
+    });
+    next();
+});
+
 app.use((err, req, res, next) => {
     if (err.type === 'entity.parse.failed') {
         console.error('❌ Invalid JSON body:', (req.rawBody || '').toString().slice(0, 200));
