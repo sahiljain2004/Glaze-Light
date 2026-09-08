@@ -41,9 +41,6 @@ const QuickLinks = () => {
     const navigation = useNavigation();
 
     const handlePress = (item) => {
-
-        console.log("Clicked:", item.title);
-
         if (item.title === "Sale Report") {
             navigation.navigate("SaleReportScreen");
         }

@@ -1,33 +1,23 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useCallback, useMemo } from "react";
 
 const TransactionContext = createContext();
 
 export const TransactionProvider = ({ children }) => {
     const [transactions, setTransactions] = useState([]);
 
-    const addTransaction = (transaction) => {
-        console.log("🔵 Adding to Context:", transaction);
+    const addTransaction = useCallback((transaction) => {
         const newTransaction = {
             id: Date.now().toString(),
             date: new Date().toISOString(),
             ...transaction,
         };
-        console.log("➕ Adding:", newTransaction);
         setTransactions((prev) => [...prev, newTransaction]);
-    };
+    }, []);
 
-    // Debug: Log transactions when they change
-    React.useEffect(() => {
-        console.log("📊 Total Transactions:", transactions.length);
-    }, [transactions]);
+    const value = useMemo(() => ({ transactions, addTransaction }), [transactions, addTransaction]);
 
     return (
-        <TransactionContext.Provider
-            value={{
-                transactions,
-                addTransaction,
-            }}
-        >
+        <TransactionContext.Provider value={value}>
             {children}
         </TransactionContext.Provider>
     );

@@ -8,6 +8,8 @@ import {
     createNativeStackNavigator,
 } from "@react-navigation/native-stack";
 import { View, ActivityIndicator } from 'react-native';
+import { navigationRef } from './services/navigationRef';
+import api from './services/api';
 
 // Import Screens
 import SaleScreen from "./Screen/SaleScreen";
@@ -33,22 +35,19 @@ const App = () => {
     useEffect(() => {
         const checkLoginStatus = async () => {
             try {
-                console.log('========================================');
-                console.log('🚀 APP START - CHECKING LOGIN STATUS');
-                console.log('========================================');
-
                 const token = await AsyncStorage.getItem('token');
-                console.log('🔑 Token found:', token ? '✅ Yes' : '❌ No');
 
                 if (token) {
+                    // Validate token by hitting a lightweight endpoint
+                    await api.get('/api/items');
                     setIsLoggedIn(true);
-                    console.log('✅ User is logged in - Direct to TransactionScreen');
                 } else {
                     setIsLoggedIn(false);
-                    console.log('❌ User not logged in - Show LoginScreen');
                 }
             } catch (error) {
-                console.error('Error checking login:', error);
+                // Token invalid or server unreachable with stale token
+                await AsyncStorage.removeItem('token');
+                await AsyncStorage.removeItem('user');
                 setIsLoggedIn(false);
             } finally {
                 setIsLoading(false);
@@ -76,7 +75,7 @@ const App = () => {
 
     return (
         <TransactionProvider>
-            <NavigationContainer>
+            <NavigationContainer ref={navigationRef}>
                 <Stack.Navigator
                     screenOptions={{
                         headerShown: false,

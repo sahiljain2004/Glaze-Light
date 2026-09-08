@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
-export default function TransactionCard({ name, saleNo, date, amount, balance, onPress }) {
+const TransactionCard = ({ name, saleNo, date, amount, balance, onPress }) => {
     return (
         <TouchableOpacity activeOpacity={0.7} style={styles.txnCard} onPress={onPress}>
             <View style={styles.txnTopRow}>
@@ -27,6 +27,8 @@ export default function TransactionCard({ name, saleNo, date, amount, balance, o
         </TouchableOpacity>
     );
 }
+
+export default memo(TransactionCard);
 
 const styles = StyleSheet.create({
     txnCard: {

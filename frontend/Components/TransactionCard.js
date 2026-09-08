@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 
 import {
     View,
@@ -31,10 +31,6 @@ const TransactionCard = ({
     // ==========================================
 
     const handleDelete = () => {
-        console.log('🔴🔴🔴 DELETE BUTTON PRESSED 🔴🔴🔴');
-        console.log('🔴 Transaction ID:', id);
-        console.log('🔴 Transaction Name:', name);
-
         Alert.alert(
             "Delete Transaction",
             `Are you sure you want to delete "${name}"?`,
@@ -47,12 +43,8 @@ const TransactionCard = ({
                     text: "Delete",
                     style: "destructive",
                     onPress: () => {
-                        console.log('🔴 DELETE CONFIRMED for ID:', id);
                         if (onDelete) {
-                            console.log('🔴 Calling onDelete with ID:', id);
                             onDelete(id);
-                        } else {
-                            console.log('🔴 onDelete prop is missing!');
                         }
                     },
                 },
@@ -258,11 +250,6 @@ const TransactionCard = ({
                             styles.actionButton
                         }
                         onPress={() => {
-
-                            console.log(
-                                "Share pressed"
-                            );
-
                         }}
                     >
 
@@ -305,7 +292,7 @@ const TransactionCard = ({
 };
 
 
-export default TransactionCard;
+export default memo(TransactionCard);
 
 
 // ==========================================

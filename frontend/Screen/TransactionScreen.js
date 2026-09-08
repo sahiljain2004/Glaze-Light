@@ -104,16 +104,7 @@ const TransactionScreen = () => {
     }, [transactions, search]);
 
     useEffect(() => {
-        const init = async () => {
-            try {
-                await api.get('/api/transactions');
-                loadTransactions();
-            } catch {
-                Alert.alert('Session Expired', 'Please login again');
-                navigation.replace('LoginScreen');
-            }
-        };
-        init();
+        loadTransactions();
     }, []);
 
     useEffect(() => {

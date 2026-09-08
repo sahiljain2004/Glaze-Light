@@ -52,10 +52,8 @@ const LoginScreen = () => {
             }
         } catch (error) {
             console.error("Error:", error);
-            Alert.alert(
-                "Connection Error",
-                `Could not connect to server.\n\nMake sure:\n1. Server is running\n2. Same WiFi network`
-            );
+            const msg = error?.response?.data?.message || error?.message || 'Could not connect to server.';
+            Alert.alert("Login Failed", msg);
             setLoading(false);
         }
     };

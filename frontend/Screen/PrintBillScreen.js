@@ -65,11 +65,11 @@ const PrintBillScreen = () => {
         const company = saleData?.company || {};
         const companyName = company.name || "Glaze Lights NX";
         const companyStatus = company.status || "(UNDER COMPOSITION)";
-        const companyAddressLine = company.addressLine || "Shop No. 94251, Near Food City";
+        const companyAddressLine = company.addressLine || "Near Food City";
         const companyAddressLine2 = company.addressLine2 || "Kailash Lodge, Patankar Bazar";
         const companyCity = company.city || "Gwalior, Madhya Pradesh";
         const companyPhone = company.phone || "9425115743";
-        const companyEmail = company.email || "info@glazelights.com";
+        const companyEmail = company.email || "raja1695@yahoo.co.in";
         const companyGSTIN = company.gstin || "23AHDPA5640E1Z0";
         const logoInitial = (company.logoText || companyName).trim().charAt(0).toUpperCase();
         const logoLabel = company.logoLabel || companyName.split(" ").slice(0, 2).join(" ");
@@ -106,9 +106,12 @@ const PrintBillScreen = () => {
         const address = saleData?.address || saleData?.customerAddress || "-";
         const paymentMethod = saleData?.paymentMethod || "Cash";
         const amountInWords = `Rupees ${numberToWords(totalAmount)} Only`;
+        const description = saleData?.description
         const terms = saleData?.terms || [
-            "Goods once sold will not be returned.",
-            "Please keep this invoice for future reference."
+            "6 Months Warranty on Fancy Lights",
+            "1 Year Guarantee on outdoor Lights",
+            "2 Year Guarantee on Hyglow Lights",
+            "3 Year Guarantee on G Jaks Lights",
         ];
 
         return `
@@ -384,7 +387,7 @@ const PrintBillScreen = () => {
                         <div class="footer-label">Invoice Amount In Words</div>
                         <div class="footer-value">${amountInWords}</div>
  <div class="footer-label">Description</div>
-                        <div class="footer-value">${""}</div>
+                        <div class="footer-value">${description}</div>
                         <div class="footer-label">Terms And Conditions</div>
                         <div class="terms-line">
                             ${terms.map(t => `${t}<br>`).join("")}
@@ -439,7 +442,7 @@ const PrintBillScreen = () => {
                 jobName: `Invoice-${saleData?.invoiceNumber || saleData?.transactionNumber || "001"}`,
             });
         } catch (error) {
-            console.log("Print Error:", error);
+            console.error("Print Error:", error);
             Alert.alert("Print Error", "Bill print nahi ho saka. Please try again.");
         }
     };

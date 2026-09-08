@@ -1,4 +1,5 @@
 import React, {
+    memo,
     useRef,
 } from "react";
 
@@ -90,7 +91,7 @@ const ItemCard = ({
 
 
 
-export default ItemCard;
+export default memo(ItemCard);
 
 
 const styles = StyleSheet.create({

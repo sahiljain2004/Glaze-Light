@@ -1,6 +1,7 @@
 const express = require('express');
 const mysql = require('mysql2');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const cors = require('cors');
 require('dotenv').config();
 
@@ -16,29 +17,46 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json());
+app.use(express.json({
+    verify: (req, res, buf) => {
+        req.rawBody = buf;
+    }
+}));
 app.use(express.urlencoded({ extended: true }));
+
+app.use((err, req, res, next) => {
+    if (err.type === 'entity.parse.failed') {
+        console.error('❌ Invalid JSON body:', (req.rawBody || '').toString().slice(0, 200));
+        return res.status(400).json({
+            success: false,
+            message: 'Invalid JSON body'
+        });
+    }
+    next(err);
+});
 
 // ============================================
 // DATABASE
 // ============================================
 
-const db = mysql.createConnection({
+const db = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'glazelight',
     port: process.env.DB_PORT || 3306,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+    connectionLimit: 10
 });
 
-db.connect((err) => {
+db.query('SELECT 1', (err) => {
     if (err) {
-        console.log('❌ Database Failed:', err.message);
+        console.error('❌ Database Failed:', err.message);
     } else {
-        console.log('✅ Database Connected');
     }
 });
+
+const promiseDb = db.promise();
 
 // ============================================
 // VERIFY TOKEN
@@ -46,7 +64,6 @@ db.connect((err) => {
 
 const verifyToken = (req, res, next) => {
     const authHeader = req.headers.authorization;
-    console.log('🔑 Auth Header:', authHeader);
 
     if (!authHeader) {
         return res.status(401).json({
@@ -66,7 +83,6 @@ const verifyToken = (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'mysecretkey');
-        console.log('✅ Token verified, user:', decoded.id);
         req.userId = decoded.id;
         next();
     } catch (error) {
@@ -89,8 +105,6 @@ app.get('/health', (req, res) => {
 
 // Login
 app.post('/api/auth/login', (req, res) => {
-    console.log('\n🔑 Login Request:');
-    console.log('Body:', req.body);
 
     const { identifier, password } = req.body;
 
@@ -105,7 +119,15 @@ app.post('/api/auth/login', (req, res) => {
         'SELECT * FROM users WHERE email = ? OR phone = ?',
         [identifier, identifier],
         (err, users) => {
-            if (err || users.length === 0) {
+            if (err) {
+                console.error('❌ DB Error during login:', err.message);
+                return res.status(500).json({
+                    success: false,
+                    message: 'Server error. Please try again.'
+                });
+            }
+
+            if (users.length === 0) {
                 return res.status(401).json({
                     success: false,
                     message: 'Invalid credentials'
@@ -114,30 +136,34 @@ app.post('/api/auth/login', (req, res) => {
 
             const user = users[0];
 
-            if (user.password !== password) {
-                return res.status(401).json({
-                    success: false,
-                    message: 'Invalid credentials'
-                });
-            }
+            const isPlainMatch = user.password === password;
 
-            const token = jwt.sign(
-                { id: user.id, email: user.email },
-                process.env.JWT_SECRET || 'mysecretkey'
-            );
-
-            console.log('✅ Login Success:', user.name);
-
-            res.json({
-                success: true,
-                message: 'Login successful',
-                token,
-                user: {
-                    id: user.id,
-                    name: user.name,
-                    email: user.email,
-                    phone: user.phone
+            bcrypt.compare(password, user.password, (bcryptErr, isBcryptMatch) => {
+                if ((bcryptErr && !isPlainMatch) || (!isBcryptMatch && !isPlainMatch)) {
+                    return res.status(401).json({
+                        success: false,
+                        message: 'Invalid credentials'
+                    });
                 }
+
+                const token = jwt.sign(
+                    { id: user.id, email: user.email },
+                    process.env.JWT_SECRET || 'mysecretkey',
+                    { expiresIn: '7d' }
+                );
+
+
+                res.json({
+                    success: true,
+                    message: 'Login successful',
+                    token,
+                    user: {
+                        id: user.id,
+                        name: user.name,
+                        email: user.email,
+                        phone: user.phone
+                    }
+                });
             });
         }
     );
@@ -145,7 +171,6 @@ app.post('/api/auth/login', (req, res) => {
 
 // ✅ GET TRANSACTIONS
 app.get('/api/transactions', verifyToken, (req, res) => {
-    console.log('📡 GET Transactions, User:', req.userId);
 
     db.query(
         'SELECT * FROM transactions WHERE user_id = ? ORDER BY id DESC',
@@ -159,7 +184,6 @@ app.get('/api/transactions', verifyToken, (req, res) => {
                 });
             }
 
-            console.log('✅ Found', transactions.length, 'transactions');
 
             res.json({
                 success: true,
@@ -176,8 +200,6 @@ app.delete('/api/transactions/:id', verifyToken, (req, res) => {
     const transactionId = req.params.id;
     const userId = req.userId;
 
-    console.log('🗑️ DELETE Transaction:', transactionId);
-    console.log('🔑 User ID:', userId);
 
     db.query(
         'SELECT items FROM transactions WHERE id = ? AND user_id = ?',
@@ -190,7 +212,6 @@ app.delete('/api/transactions/:id', verifyToken, (req, res) => {
 
             const rawItems = rows.length > 0 ? rows[0].items : null;
             const txnItems = rawItems ? (typeof rawItems === 'string' ? JSON.parse(rawItems) : rawItems) : [];
-            const promiseDb = db.promise();
 
             const restoreStock = async () => {
                 for (const item of txnItems) {
@@ -219,7 +240,6 @@ app.delete('/api/transactions/:id', verifyToken, (req, res) => {
                             return res.status(404).json({ success: false, message: 'Transaction not found' });
                         }
 
-                        console.log('✅ Transaction deleted:', transactionId);
 
                         res.json({ success: true, message: 'Transaction deleted successfully' });
                     }
@@ -238,10 +258,6 @@ app.delete('/api/transactions/:id', verifyToken, (req, res) => {
 
 // ✅ UPDATE TRANSACTION
 app.put('/api/transactions/:id', verifyToken, (req, res) => {
-    console.log('\n✏️ UPDATE Transaction:');
-    console.log('🔑 ID:', req.params.id);
-    console.log('🔑 User:', req.userId);
-    console.log('📦 Body:', req.body);
 
     const {
         customerName,
@@ -272,7 +288,6 @@ app.put('/api/transactions/:id', verifyToken, (req, res) => {
             const newItems = items || [];
 
             // Restore old stock
-            const promiseDb = db.promise();
             const adjustStock = async () => {
                 for (const oldItem of oldItems) {
                     const oldId = parseInt(oldItem.dbId ?? oldItem.itemId, 10);
@@ -347,7 +362,6 @@ app.put('/api/transactions/:id', verifyToken, (req, res) => {
                             });
                         }
 
-                        console.log('✅ Transaction updated:', req.params.id);
 
                         res.json({
                             success: true,
@@ -364,9 +378,6 @@ app.put('/api/transactions/:id', verifyToken, (req, res) => {
 });
 // ✅ CREATE TRANSACTION
 app.post('/api/transactions', verifyToken, (req, res) => {
-    console.log('\n📝 CREATE TRANSACTION Request:');
-    console.log('🔑 User ID:', req.userId);
-    console.log('📦 Body:', req.body);
 
     const {
         customerName,
@@ -422,7 +433,6 @@ app.post('/api/transactions', verifyToken, (req, res) => {
                 });
             }
 
-            console.log('✅ Transaction created with ID:', result.insertId);
 
             // ============================================
             // DECREMENT STOCK FOR BILLED ITEMS
@@ -430,8 +440,6 @@ app.post('/api/transactions', verifyToken, (req, res) => {
 
             const decrementStock = async () => {
                 if (!Array.isArray(items) || items.length === 0) return;
-
-                const promiseDb = db.promise();
 
                 for (const billItem of items) {
                     const dbId = parseInt(
@@ -483,7 +491,6 @@ app.post('/api/transactions', verifyToken, (req, res) => {
 // ============================================
 
 app.get('/api/sale-report', verifyToken, (req, res) => {
-    console.log('📊 Sale Report Called!');
 
     const userId = req.userId;
 
@@ -534,9 +541,6 @@ app.get('/api/sale-report', verifyToken, (req, res) => {
 
 // ✅ CREATE ITEM
 app.post('/api/items', verifyToken, (req, res) => {
-    console.log('\n📝 Create Item Request:');
-    console.log('🔑 User ID:', req.userId);
-    console.log('📦 Body:', req.body);
 
     const { name, category, unit, price, stock } = req.body;
 
@@ -576,7 +580,6 @@ app.post('/api/items', verifyToken, (req, res) => {
                 });
             }
 
-            console.log('✅ Item created with ID:', result.insertId);
 
             res.status(201).json({
                 success: true,
@@ -597,8 +600,6 @@ app.post('/api/items', verifyToken, (req, res) => {
 
 // ✅ GET ALL ITEMS
 app.get('/api/items', verifyToken, (req, res) => {
-    console.log('\n📊 Get Items Request:');
-    console.log('🔑 User ID:', req.userId);
 
     db.query(
         'SELECT * FROM items WHERE user_id = ? ORDER BY id DESC',
@@ -612,7 +613,6 @@ app.get('/api/items', verifyToken, (req, res) => {
                 });
             }
 
-            console.log('✅ Found:', items.length, 'items');
 
             res.json({
                 success: true,
@@ -637,9 +637,6 @@ app.get('/api/items/:id', verifyToken, (req, res, next) => {
         return next();
     }
 
-    console.log('\n📊 Get Item Request:');
-    console.log('🔑 Item ID:', req.params.id);
-    console.log('🔑 User ID:', req.userId);
 
     db.query(
         'SELECT * FROM items WHERE id = ? AND user_id = ?',
@@ -681,10 +678,6 @@ app.get('/api/items/:id', verifyToken, (req, res, next) => {
 
 // ✅ UPDATE ITEM
 app.put('/api/items/:id', verifyToken, (req, res) => {
-    console.log('\n✏️ Update Item Request:');
-    console.log('🔑 Item ID:', req.params.id);
-    console.log('🔑 User ID:', req.userId);
-    console.log('📦 Body:', req.body);
 
     const { name, category, unit, price, stock } = req.body;
 
@@ -721,7 +714,6 @@ app.put('/api/items/:id', verifyToken, (req, res) => {
                 });
             }
 
-            console.log('✅ Item updated:', req.params.id);
 
             res.json({
                 success: true,
@@ -733,9 +725,6 @@ app.put('/api/items/:id', verifyToken, (req, res) => {
 
 // ✅ DELETE ITEM
 app.delete('/api/items/:id', verifyToken, (req, res) => {
-    console.log('\n🗑️ Delete Item Request:');
-    console.log('🔑 Item ID:', req.params.id);
-    console.log('🔑 User ID:', req.userId);
 
     db.query(
         'DELETE FROM items WHERE id = ? AND user_id = ?',
@@ -756,7 +745,6 @@ app.delete('/api/items/:id', verifyToken, (req, res) => {
                 });
             }
 
-            console.log('✅ Item deleted:', req.params.id);
 
             res.json({
                 success: true,
@@ -768,9 +756,6 @@ app.delete('/api/items/:id', verifyToken, (req, res) => {
 
 // ✅ SEARCH ITEMS
 app.get('/api/items/search/:query', verifyToken, (req, res) => {
-    console.log('\n🔍 Search Items Request:');
-    console.log('🔑 Query:', req.params.query);
-    console.log('🔑 User ID:', req.userId);
 
     const searchTerm = `%${req.params.query}%`;
 
@@ -802,9 +787,6 @@ app.get('/api/items/search/:query', verifyToken, (req, res) => {
 });
 // ✅ SEARCH TRANSACTIONS - WITH PHONE NUMBER
 app.get('/api/transactions/search', verifyToken, (req, res) => {
-    console.log('\n🔍 Search Transactions:');
-    console.log('🔑 User ID:', req.userId);
-    console.log('📦 Query:', req.query);
 
     const userId = req.userId;
     const query = req.query.q || '';
@@ -829,7 +811,6 @@ app.get('/api/transactions/search', verifyToken, (req, res) => {
                 });
             }
 
-            console.log('✅ Found:', transactions.length, 'transactions');
 
             res.json({
                 success: true,
@@ -858,8 +839,6 @@ app.get('/api/transactions/search', verifyToken, (req, res) => {
 });
 
 app.get('/api/dashboard/summary', verifyToken, (req, res) => {
-    console.log('\n📊 Dashboard Summary:');
-    console.log('🔑 User ID:', req.userId);
 
     const userId = req.userId;
 
@@ -887,7 +866,6 @@ app.get('/api/dashboard/summary', verifyToken, (req, res) => {
             }
 
             const data = results[0] || {};
-            console.log('✅ Summary:', data);
 
             res.json({
                 success: true,
@@ -908,8 +886,6 @@ app.get('/api/dashboard/summary', verifyToken, (req, res) => {
 
 // ✅ GET RECENT TRANSACTIONS
 app.get('/api/dashboard/recent', verifyToken, (req, res) => {
-    console.log('\n📊 Recent Transactions:');
-    console.log('🔑 User ID:', req.userId);
 
     const userId = req.userId;
     const limit = parseInt(req.query.limit) || 5;
@@ -939,7 +915,6 @@ app.get('/api/dashboard/recent', verifyToken, (req, res) => {
                 });
             }
 
-            console.log('✅ Found:', transactions.length, 'transactions');
 
             res.json({
                 success: true,
@@ -962,10 +937,6 @@ app.get('/api/dashboard/recent', verifyToken, (req, res) => {
 // ============================================
 
 app.put('/api/items/stock/:id', verifyToken, (req, res) => {
-    console.log('\n📦 Update Stock:');
-    console.log('🔑 Item ID:', req.params.id);
-    console.log('🔑 User ID:', req.userId);
-    console.log('📦 Body:', req.body);
 
     const userId = req.userId;
     const { quantity, itemName } = req.body; // quantity sold
@@ -1029,7 +1000,6 @@ app.put('/api/items/stock/:id', verifyToken, (req, res) => {
                         });
                     }
 
-                    console.log('✅ Stock updated:', currentStock, '→', newStock);
 
                     res.json({
                         success: true,
@@ -1045,9 +1015,6 @@ app.put('/api/items/stock/:id', verifyToken, (req, res) => {
 
 // ✅ SEARCH ITEMS (for auto-suggest)
 app.get('/api/items/search', verifyToken, (req, res) => {
-    console.log('\n🔍 Search Items:');
-    console.log('🔑 User ID:', req.userId);
-    console.log('📦 Query:', req.query);
 
     const userId = req.userId;
     const query = req.query.q || '';
@@ -1071,7 +1038,6 @@ app.get('/api/items/search', verifyToken, (req, res) => {
                 });
             }
 
-            console.log('✅ Found:', items.length, 'items');
 
             res.json({
                 success: true,
@@ -1100,25 +1066,12 @@ app.get('/wakeup', (req, res) => {
 // ============================================
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log('\n=================================');
-    console.log(`🚀 Server: http://10.151.11.36:${PORT}`);
-    console.log(`📝 Health: http://10.151.11.36:${PORT}/health`);
-    console.log(`🔑 Login: POST /api/auth/login`);
-    console.log(`📊 GET Transactions: GET /api/transactions`);
-    console.log(`📝 CREATE Transaction: POST /api/transactions`);
-    console.log(`📊 Sale Report: GET /api/sale-report`);
-    console.log(`📝 CREATE Item: POST /api/items`);
-    console.log(`📊 GET Items: GET /api/items`);
-    console.log(`📊 Dashboard Summary: GET /api/dashboard/summary`);
-    console.log(`📊 Recent Transactions: GET /api/dashboard/recent`);
-    console.log('=================================\n');
 
     // Self-ping every 14 min 59 sec to prevent Render spin-down
     const BASE_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
     const WAKEUP_URL = `${BASE_URL}/wakeup`;
     setInterval(() => {
         fetch(WAKEUP_URL)
-            .then(() => console.log('💓 Wakeup ping sent'))
             .catch(err => console.error('❌ Wakeup ping failed:', err.message));
     }, 14 * 60 * 1000 + 59 * 1000); // 14:59 min
 });
